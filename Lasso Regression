@@ -1,0 +1,45 @@
+
+data <- as.data.frame(data)
+merge.data <- cbind(train, data)
+merge.data <- merge.data[,-c(1,3)]
+
+##Here is the full model using all data for training as well as prediction
+x <- model.matrix(Essential ~., merge.data)[,-1]
+y <- merge.data[,1]
+
+##With the idea of lasso regression is finding the best punishment lambda to 
+##minimize error. We can find the lambda by using the function.
+cv.lasso <- cv.glmnet(x, y, alpha = 1, family = 'binomial')
+
+##The function finds some different lambda such as cv.lasso$lambda.min and cv.lasso$lambda.1se, 
+##but I think the cv.lasso$lambda.min is the best one. 
+model <- glmnet(x, y, alpha = 1, family = 'binomial', lambda = cv.lasso$lambda.min)
+
+##Here is the prediction for all the data
+pred <- predict(model, x, type = 'response')
+
+##Then compare them with the reality. The correct rate is around 83% with better rate in
+##predicting non-essential 89% and essential roughly 64%
+confusionMatrix(as.factor(ifelse(pred >= .5, '1', '0')), as.factor(merge.data$Essential),
+                positive = '1')
+
+
+##The result is alright, but I want the model to predict something independent with the original data
+##Therefore, I divide the data into two groups with 60% in training set and 40% in validation set.
+##We can do that with
+train.index <- sample(nrow(merge.data), nrow(merge.data)*.6)
+train.data <- train[train.index, ]
+valid.data <- train[-train.index, ]
+
+##And we repeat the codes with full model mentioned above
+x <- model.matrix(Essential ~., train.data)[,-1]
+y <- train.data[,1]
+cv.lasso <- cv.glmnet(x, y, alpha = 1, family = 'binomial')
+model <- glmnet(x, y, alpha = 1, family = 'binomial', lambda = cv.lasso$lambda.min)
+x1 <- model.matrix(Essential ~., valid.data)[,-1]
+pred <- predict(model, x1, type = 'response')
+confusionMatrix(as.factor(ifelse(pred >= 0.5, 1, 0)), as.factor(valid.data$Essential),
+                positive = '1')
+
+##The correction rate is around 75% which is not great. The same problem occurs that prediction on non-essential 
+##part is much better than essential (89% to 49%).
